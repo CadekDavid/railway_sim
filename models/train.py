@@ -26,29 +26,43 @@ class Train(threading.Thread):
         self._stop_event.set()
 
     def run(self):
-        if self.start_delay_s > 0:
-            time.sleep(self.start_delay_s)
+        try:
+            if self.start_delay_s > 0:
+                time.sleep(self.start_delay_s)
 
-        self.logger.log(f"{self.name} starting route")
+            self.logger.log(f"{self.name} starting route")
 
-        for i, step in enumerate(self.route):
-            if self._stop_event.is_set():
-                self.logger.log(f"{self.name} stopped")
-                break
+            for i, step in enumerate(self.route):
+                if self._stop_event.is_set():
+                    self.logger.log(f"{self.name} stopped")
+                    break
 
-            # příjezd a pobyt ve stanici
-            step.station.arrive(self.name, self.logger)
-            time.sleep(step.dwell_time_s / self.speed_multiplier)
-            step.station.depart(self.name, self.logger)
+                # station arrival
+                try:
+                    step.station.arrive(self.name, self.logger)
+                except Exception as e:
+                    self.logger.log(f"ERROR in station.arrive for {self.name}: {e}")
+                    continue
 
-            if step.outgoing_section is None:
-                self.logger.log(f"{self.name} finished at {step.station.name}")
-                break
+                time.sleep(step.dwell_time_s / self.speed_multiplier)
 
+                # station depart
+                try:
+                    step.station.depart(self.name, self.logger)
+                except Exception as e:
+                    self.logger.log(f"ERROR in station.depart for {self.name}: {e}")
 
-            self._travel_section(step.outgoing_section)
+                if step.outgoing_section is None:
+                    self.logger.log(f"{self.name} finished at {step.station.name}")
+                    break
 
-        self.logger.log(f"{self.name} route thread ends")
+                self._travel_section(step.outgoing_section)
+
+        except Exception as e:
+            self.logger.log(f"CRITICAL ERROR in Train.run of {self.name}: {e}")
+
+        finally:
+            self.logger.log(f"{self.name} route thread ends")
 
     def _travel_section(self, section: TrackSection):
 

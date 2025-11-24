@@ -44,27 +44,38 @@ def build_demo_world(logger: Logger):
 
 def main():
     logger = Logger()
-    stations, sections, routes = build_demo_world(logger)
+    try:
+        stations, sections, routes = build_demo_world(logger)
+    except Exception as e:
+        logger.log(f"ERROR building world: {e}")
+        return
 
-    t1 = Train("T1", routes["T1"], logger, start_delay_s=0.0, speed_multiplier=1.0)
-    t2 = Train("T2", routes["T2"], logger, start_delay_s=0.5, speed_multiplier=1.0)
-    t3 = Train("T3", routes["T3"], logger, start_delay_s=1.0, speed_multiplier=1.0)
+    try:
+        t1 = Train("T1", routes["T1"], logger)
+        t2 = Train("T2", routes["T2"], logger)
+        t3 = Train("T3", routes["T3"], logger)
+        disp = Dispatcher(sections, logger)
+    except Exception as e:
+        logger.log(f"ERROR creating threads: {e}")
+        return
 
-    disp = Dispatcher(sections, logger, tick_s=1.0)
+    try:
+        disp.start()
+        t1.start()
+        t2.start()
+        t3.start()
 
-    disp.start()
-    t1.start()
-    t2.start()
-    t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
 
-    t1.join()
-    t2.join()
-    t3.join()
+    except Exception as e:
+        logger.log(f"ERROR running simulation: {e}")
 
-    disp.stop()
-    disp.join()
-
-    logger.log("Simulation finished")
+    finally:
+        disp.stop()
+        disp.join()
+        logger.log("Simulation finished")
 
 
 if __name__ == "__main__":

@@ -18,13 +18,22 @@ class Dispatcher(threading.Thread):
 
     def run(self):
         self.logger.log("Dispatcher started")
-        while not self._stop_event.is_set():
-            occupied = []
-            for s in self.sections:
-                if s.occupied_by is not None:
-                    occupied.append(f"{s.name}:{s.occupied_by}")
-            if occupied:
-                self.logger.log("Monitoring: occupied sections -> " + ", ".join(occupied))
-            time.sleep(self.tick_s)
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    occupied = []
+                    for s in self.sections:
+                        if s.occupied_by is not None:
+                            occupied.append(f"{s.name}:{s.occupied_by}")
+                    if occupied:
+                        self.logger.log("Monitoring: occupied sections -> " + ", ".join(occupied))
+                    time.sleep(self.tick_s)
+                except Exception as e:
+                    self.logger.log(f"ERROR in dispatcher loop: {e}")
 
-        self.logger.log("Dispatcher ended")
+        except Exception as e:
+            self.logger.log(f"CRITICAL ERROR in Dispatcher: {e}")
+
+        finally:
+            self.logger.log("Dispatcher ended")
+

@@ -19,41 +19,48 @@ class TrackSection:
         self._cond = threading.Condition(self._lock)
 
     def acquire(self, train_name: str, logger, timeout: Optional[float] = None) -> bool:
+        try:
+            with self._lock:
+                if timeout is None:
+                    while self.occupied_by is not None:
+                        logger.log(f"{train_name} waits for section {self.name} (occupied by {self.occupied_by})")
+                        self._cond.wait()
 
-        with self._lock:
-            if timeout is None:
-                while self.occupied_by is not None:
-                    logger.log(f"{train_name} waits for section {self.name} (occupied by {self.occupied_by})")
-                    self._cond.wait()
-                self.occupied_by = train_name
-                logger.log(f"{train_name} ENTERS section {self.name}")
-                return True
-            else:
+                    self.occupied_by = train_name
+                    logger.log(f"{train_name} ENTERS section {self.name}")
+                    return True
 
-                end = threading.current_thread()
+                else:
+                    import time
+                    deadline = time.time() + timeout
+                    while self.occupied_by is not None:
+                        remaining = deadline - time.time()
+                        if remaining <= 0:
+                            return False
+                        self._cond.wait(timeout=remaining)
 
-                import time
-                deadline = time.time() + timeout
-                while self.occupied_by is not None:
-                    remaining = deadline - time.time()
-                    if remaining <= 0:
-                        return False
-                    logger.log(f"{train_name} waits for section {self.name} (occupied by {self.occupied_by})")
-                    self._cond.wait(timeout=remaining)
+                    self.occupied_by = train_name
+                    logger.log(f"{train_name} ENTERS section {self.name}")
+                    return True
 
-                self.occupied_by = train_name
-                logger.log(f"{train_name} ENTERS section {self.name}")
-                return True
+        except Exception as e:
+            logger.log(f"ERROR in acquire() for section {self.name}: {e}")
+            return False
 
     def release(self, train_name: str, logger):
-        with self._lock:
-            if self.occupied_by != train_name:
+        try:
+            with self._lock:
+                if self.occupied_by != train_name:
+                    logger.log(
+                        f"WARNING: {train_name} tried to leave {self.name}, but section was owned by {self.occupied_by}")
+                    return
 
-                logger.log(f"WARNING: {train_name} tried to leave {self.name}, but occupied_by={self.occupied_by}")
-                return
-            self.occupied_by = None
-            logger.log(f"{train_name} LEAVES section {self.name}")
-            self._cond.notify_all()
+                self.occupied_by = None
+                logger.log(f"{train_name} LEAVES section {self.name}")
+                self._cond.notify_all()
+
+        except Exception as e:
+            logger.log(f"ERROR in release() for section {self.name}: {e}")
 
 
 @dataclass
@@ -70,18 +77,24 @@ class Station:
         self._sem = threading.Semaphore(self.platforms)
 
     def arrive(self, train_name: str, logger):
-        self._sem.acquire()
-        with self._lock:
-            self.occupied_platforms += 1
-            logger.log(f"{train_name} ARRIVES at station {self.name} "
-                       f"(platforms used {self.occupied_platforms}/{self.platforms})")
+        try:
+            self._sem.acquire()
+            with self._lock:
+                self.occupied_platforms += 1
+                logger.log(f"{train_name} ARRIVES at station {self.name} "
+                           f"(platforms {self.occupied_platforms}/{self.platforms})")
+        except Exception as e:
+            logger.log(f"ERROR in Station.arrive at {self.name}: {e}")
 
     def depart(self, train_name: str, logger):
-        with self._lock:
-            self.occupied_platforms -= 1
-            logger.log(f"{train_name} DEPARTS station {self.name} "
-                       f"(platforms used {self.occupied_platforms}/{self.platforms})")
-        self._sem.release()
+        try:
+            with self._lock:
+                self.occupied_platforms -= 1
+                logger.log(f"{train_name} DEPARTS station {self.name} "
+                           f"(platforms {self.occupied_platforms}/{self.platforms})")
+            self._sem.release()
+        except Exception as e:
+            logger.log(f"ERROR in Station.depart at {self.name}: {e}")
 
 
 @dataclass
