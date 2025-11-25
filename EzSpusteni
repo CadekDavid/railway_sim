@@ -1,0 +1,7 @@
+git clone https://github.com/CadekDavid/railway_sim.git
+
+cd railway_sim
+
+python main.py
+
+Tu jsou napsane prikazy abych je nemusel psat
