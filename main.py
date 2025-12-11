@@ -2,6 +2,7 @@ from utils.logger import Logger
 from models.track import Station, TrackSection, RouteStep
 from models.train import Train
 from dispatcher import Dispatcher
+from planner import TrainRequest, plan_timetable
 
 
 def build_demo_world(logger: Logger):
@@ -44,39 +45,47 @@ def build_demo_world(logger: Logger):
 
 def main():
     logger = Logger()
-    try:
-        stations, sections, routes = build_demo_world(logger)
-    except Exception as e:
-        logger.log(f"ERROR building world: {e}")
-        return
+    stations, sections, routes = build_demo_world(logger)
 
-    try:
-        t1 = Train("T1", routes["T1"], logger)
-        t2 = Train("T2", routes["T2"], logger)
-        t3 = Train("T3", routes["T3"], logger)
-        disp = Dispatcher(sections, logger)
-    except Exception as e:
-        logger.log(f"ERROR creating threads: {e}")
-        return
 
-    try:
-        disp.start()
-        t1.start()
-        t2.start()
-        t3.start()
+    requests = [
+        TrainRequest("T1", routes["T1"], desired_start_s=0.0),
+        TrainRequest("T2", routes["T2"], desired_start_s=0.0),
+        TrainRequest("T3", routes["T3"], desired_start_s=120.0),
+    ]
 
-        t1.join()
-        t2.join()
-        t3.join()
 
-    except Exception as e:
-        logger.log(f"ERROR running simulation: {e}")
+    scheduled = plan_timetable(requests, logger, max_delay_s=1800.0, step_s=60.0)
 
-    finally:
-        disp.stop()
-        disp.join()
-        logger.log("Simulation finished")
 
+    trains: list[Train] = []
+    for st in scheduled:
+        train = Train(
+            name=st.name,
+            route=st.route,
+            logger=logger,
+            start_delay_s=st.scheduled_start_s,
+            speed_multiplier=1.0,
+        )
+        trains.append(train)
+
+
+    disp = Dispatcher(sections, logger, tick_s=1.0)
+
+
+    disp.start()
+    for t in trains:
+        t.start()
+
+
+    for t in trains:
+        t.join()
+
+
+    disp.stop()
+    disp.join()
+
+    logger.log("Simulation finished")
 
 if __name__ == "__main__":
     main()
